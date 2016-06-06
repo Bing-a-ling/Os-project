@@ -22,18 +22,16 @@ typedef struct Node        /* A struct to save jobs*/
 }Node;
 
 /*****  Global variables declaration *****/
-//int sig_flag = 0;
+
 Node *head, *tail;
 Queue his_info;
 
+/***** Function declaration *****/
 void show_his_cmd(void);
 void init_envi();
 void exec_cd_cmd(char * route);
 void add_history(char * buffer);
 void setup(char inputBuffer[], char *args[], int *background);
-//void add_node();
-//void del_node();
-//void set_flag();
 
 
 
@@ -43,22 +41,21 @@ int main(void)
     
     int background;   /* equals 1 if a command is followed by '&' */
     char * args[MAX_LINE/2 + 1];
-    int should_run = 1, status = 0;
     char inputBuffer[MAX_LINE]; /* buffer to hold command entered */
 
     init_envi();
-    
+    int run_flag = 1;
 
     
 
-    while(1) 
+    while(run_flag) 
     {   
-         /***** Set Signals *****/
-     /*   struct sigaction action;
+/***** Set Signals *****/
+        struct sigaction action;
         action.sa_sigaction = show_his_cmd;
-        sigfillset(&action.sa_mask);
-        action.sa_flags = SA_SIGINFO;
-        sigaction(SIGINT, &action, NULL);*/
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = 0;
+        sigaction(SIGINT, &action, NULL);
         signal(SIGCHLD, SIG_IGN);
 
         background = 0;
@@ -71,40 +68,95 @@ int main(void)
         fflush(stdout);
 /*****  Get the input and change it into useful information *****/
         fgets(inputBuffer, 80, stdin);
-        setup(inputBuffer, args, &background);
-
-/*****  Inbuild Commands *****/
         
-        if(strcmp(args[0], "exit") == 0)/*exit*/
+/*****  Inbuild Commands *****/
+        if(inputBuffer[0]=='r'&& (inputBuffer[1]==' '||inputBuffer[1]=='\n'))
+        {   int cmd_num;
+            if(inputBuffer[1] == '\n')
+            {   
+                add_history(his_info.his_cmd[his_info.end]);
+                cmd_num = his_info.end;
+            }
+            else
+            {   int i;
+                if(his_info.end >= his_info.start)
+                {   for(i = his_info.end; i != his_info.start - 1; i--)
+                    {
+                        if(his_info.his_cmd[i][0] == inputBuffer[2])
+                            break;
+                    }
+                    if (i == his_info.start - 1)
+                    {    printf("Can't find command with '%c'!\n", inputBuffer[2]);
+                         continue;
+                    }
+                    else
+                        cmd_num = i;
+                }
+                else
+                {   for(i = his_info.end + HISNUM; i != his_info.start - 1; i--)
+                    {
+                        if(his_info.his_cmd[i % HISNUM][0] == inputBuffer[2])
+                            break;
+                    }
+                    if (i == his_info.start - 1)
+                    {    printf("Can't find command with '%c'!\n", inputBuffer[2]);
+                         continue;
+                    }
+                    else
+                        cmd_num = i;
+                }
+                add_history(his_info.his_cmd[cmd_num]);
+
+            }
+            setup(his_info.his_cmd[cmd_num], args, &background);
+            exec(args,his_info.his_cmd[cmd_num],&run_flag, background);
+            continue;
+        }
+/*****  execute *****/
+        add_history(inputBuffer);
+        setup(inputBuffer, args, &background);
+        exec(args, inputBuffer, &run_flag, background);
+        
+    }
+   // printf("\nwhy am i here???\n");
+    return 0;
+}
+
+void exec(char * args[], char inputBuffer[], int *run_flag, int background)
+{   int status=0;
+    if(strcmp(args[0], "exit") == 0)/*exit*/
         {
-            add_history(inputBuffer);
             printf("Goodbye~\n");
-            exit(0);
+            *run_flag = 0;
+            return;
         }
         
         if(strcmp(args[0], "cd") == 0 ) /* cd */
         {   
             exec_cd_cmd(args[1]);
-
-            add_history(inputBuffer);
-            continue;
+             
+            return;
+        }
+        if(strcmp(args[0], "good") == 0 ) /* good night */
+        {   printf("Good night, dear.\n");
+            *run_flag = 0;
+            return;
         }
         if(strcmp(args[0], "history") == 0 ) /* history */
-        {   printf("%d %d %d %s", his_info.start, his_info.end, his_info.start_number, inputBuffer);
+        {
             show_his_cmd();
-   //         add_history(inputBuffer);
-            continue;
+
+            return;
         }
-
-        add_history(inputBuffer);
-
+ 
         pid_t pid = fork();
         if(pid == 0)  /* child process */
         {   
-            printf("I'm child\n");
+            //printf("I'm child\n");
             execvp(args[0], args);
             printf("Wrong command!\n");
-            break;
+            *run_flag = 0;
+            return;
         }
         else
         {
@@ -117,13 +169,10 @@ int main(void)
                     waitpid(pid, &status, 0);
             }
         }
-    }
-    printf("\nwhy am i here???\n");
-    return 0;
 }
 
 void init_envi()
-{   printf("init\n");
+{  // printf("init\n");
     his_info.start = his_info.end = 0;
     his_info.start_number = 1;
     head = tail = NULL;
@@ -132,52 +181,62 @@ void init_envi()
 
 
 void show_his_cmd(void)
-{   printf("history\n %d", getpid());
+{  // printf("history\n %d", getpid());
     int i ,j,k= 0;
-    printf("%d, %d, %s",his_info.start,his_info.start,his_info.his_cmd[0]);
     printf("\n    Num        Command\n");
     if(his_info.start < his_info.end)
-    {   printf("start < end\n");
-        for(i = his_info.start; i< his_info.end; i++)
+    {
+        for(i = his_info.start; i<= his_info.end; i++)
         {
-            printf("    %d        ", his_info.start_number + i - his_info.start);
+            printf("    %d        ", (his_info.start_number + i - his_info.start));
             for(j = 0; his_info.his_cmd[i][j] != '\n'; j++)
-            {   if(his_info.his_cmd[i][j] == '\0')
-                    printf(" ");
-                else
-                    printf("%s ", his_info.his_cmd[i][j]);
+            {   
+                    printf("%c", his_info.his_cmd[i][j]);
             }
+            printf("\n");
         }        
     }
     else 
-    {   printf("start > end\n");
-        {   for(i = his_info.start; (i% HISNUM) != his_info.end; i++)
-            {
-                printf("    %d        ", his_info.start_number + i - his_info.start);
-                for(j = 0; his_info.his_cmd[i%HISNUM][j] != '\n'; j++)
-                {   if(his_info.his_cmd[i%HISNUM][j] == '\0')
-                        printf(" ");
-                    else
-                        printf("%s ", his_info.his_cmd[i][j]);
-                }
-            }
-        }
-    }   
+    {   //printf("start > end\n");
+         if(his_info.start > his_info.end)
+         {   for(i = his_info.start; i!= his_info.start +  HISNUM; i++)
+             {
+                 printf("    %d        ", his_info.start_number + i - his_info.start);
+                 for(j = 0; his_info.his_cmd[i%HISNUM][j] != '\n'; j++)
+                 {   
+                         printf("%c", his_info.his_cmd[i%HISNUM][j]);
+                 }
+                 printf("\n");
+             }
+         }
+    }  
 }
 
+
+
 void add_history(char *input)
-{   
-    int i;
-    printf("added to his.");
-    his_info.end = (his_info.end + 1)% HISNUM;
-    if(his_info.end == his_info.start){
-        his_info.start = (his_info.start+1) % HISNUM;
-        his_info.start_number++;
+{   int i,j;
+    static int empty_flag = 1;
+   // printf("added to his.");
+    if(empty_flag)
+    {   for(i = 0; input[i] !='\0'; i++)
+           his_info.his_cmd[his_info.end][i] = input[i];
+        empty_flag = 0;
     }
-    for(i = 0; input[i] !='\n'; i++)
-       his_info.his_cmd[his_info.end][i] = input[i];
-    input[i] = '\n';
-    printf("%d %d\n", his_info.start, his_info.end);
+    else
+    {
+        his_info.end = (his_info.end + 1)% HISNUM;
+        for(i = 0; input[i] !='\0'; i++)
+            his_info.his_cmd[his_info.end][i] = input[i];
+        if(his_info.end == his_info.start)
+        {
+            his_info.start = (his_info.start+1) % HISNUM;
+            his_info.start_number++;
+        }
+    }
+    
+    his_info.his_cmd[his_info.end][i] = '\0';
+  //  printf("%d %d\n", his_info.start, his_info.end);
 
 }
 
@@ -231,6 +290,6 @@ void exec_cd_cmd(char * route)
                 default:
                     fprintf(stderr, "SOME ERROR HAPPENED IN CHFIR\n");
             
-        }
+            }
     }
 }
